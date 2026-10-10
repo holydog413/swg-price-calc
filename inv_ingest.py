@@ -103,7 +103,7 @@ def apply(inv, cmd, msg):
         inv["items"].pop(key, None)
         inv["log"].append({"id": str(msg["id"]), "ts": msg.get("timestamp", ""), "cmd": msg["content"], "item": m["item"], "op": "del"}); return
     it = inv["items"].setdefault(key, {**m, "qty": 0, "cpu": None, "qsold": 0, "revenue": 0.0, "costSold": 0.0})
-    it.update({k: v for k, v in m.items()})  # refresh stats/type
+    it.update({k: v for k, v in m.items() if not (k == "item" and m["type"] == "other")})  # refresh stats/type; keep original spelling of free-text names
     q = cmd.get("qty", 0)
     if cmd["op"] == "add":
         if cmd["px"] is not None:

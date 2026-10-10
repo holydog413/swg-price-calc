@@ -1,0 +1,96 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SWG Uprising Resource Price Calculator · DKD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:wght@400;600&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0708;--panel:#171112;--line:#2a1a1c;--text:#e8dcd9;--muted:#a8958f;--red:#c0262d;--red-hi:#e0373e;--red-deep:#7a1116;--display:"Cinzel",Georgia,serif;--serif:"Cormorant Garamond",Georgia,serif}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#1d0c0e 0%,var(--bg) 60%) fixed;color:var(--text);font:14px/1.45 Inter,system-ui,sans-serif}
+header{padding:28px 20px 18px;text-align:center;border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(192,38,45,.12),transparent)}
+h1{font-family:var(--display);letter-spacing:.12em;margin:0;font-size:clamp(20px,3.4vw,34px);text-transform:uppercase}
+h1 span{color:var(--red-hi)}.sub{font-family:var(--serif);color:var(--muted);font-size:18px;margin-top:4px}
+h2{font-family:var(--display);letter-spacing:.1em;font-size:15px;text-transform:uppercase;margin:0 0 12px;color:#f3e9e6;border-left:3px solid var(--red);padding-left:10px}
+main{max-width:1300px;margin:0 auto;padding:18px;display:grid;gap:18px;grid-template-columns:330px 1fr}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.panel{background:linear-gradient(180deg,#1a1314,var(--panel));border:1px solid var(--line);border-radius:6px;padding:16px;box-shadow:0 0 0 1px rgba(192,38,45,.05),0 8px 30px rgba(0,0,0,.5)}
+aside{display:grid;gap:18px;align-content:start}
+label{display:block;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin:8px 0 3px}
+input,select{width:100%;background:#0e0a0b;border:1px solid #3a2326;color:var(--text);padding:7px 9px;border-radius:4px;font:inherit}
+input:focus,select:focus{outline:none;border-color:var(--red-hi);box-shadow:0 0 0 2px rgba(224,55,62,.25)}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.grid label{margin:4px 0 2px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{display:flex;align-items:center;gap:4px;background:#0e0a0b;border:1px solid #3a2326;padding:4px 8px;border-radius:14px;cursor:pointer;font-size:12px;text-transform:none;letter-spacing:0;margin:0;color:var(--text)}
+.chip input{width:auto;margin:0;accent-color:var(--red)}
+button{background:linear-gradient(180deg,var(--red),var(--red-deep));border:1px solid var(--red-hi);color:#fff;padding:7px 12px;border-radius:4px;cursor:pointer;font-family:var(--display);letter-spacing:.06em;font-size:12px}
+button.ghost{background:transparent;border-color:#3a2326;color:var(--muted)}
+.big{font-family:var(--display);font-size:26px;color:var(--red-hi);text-shadow:0 0 18px rgba(224,55,62,.35)}
+.muted{color:var(--muted);font-size:12px}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}.toolbar>*{flex:1 1 160px;width:auto}
+.tablewrap{overflow:auto;max-height:75vh;border:1px solid var(--line);border-radius:4px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{position:sticky;top:0;background:#1f1416;color:#f3e9e6;font-family:var(--display);font-weight:500;letter-spacing:.05em;font-size:12px;cursor:pointer;white-space:nowrap;padding:8px 6px;border-bottom:1px solid var(--red-deep);text-align:left}
+th.sorted{color:var(--red-hi)}td{padding:6px;border-bottom:1px solid var(--line);white-space:nowrap}
+td.n{text-align:right;font-variant-numeric:tabular-nums}td.st{color:#d6c8c4}td.sel{color:#ff6a6f;font-weight:600}
+tr:hover td{background:rgba(192,38,45,.08)}tr.pick td{background:rgba(192,38,45,.18)}
+td.price{color:var(--red-hi);font-weight:600}a{color:#ff6a6f}
+footer{text-align:center;color:#6f625e;padding:20px;font-size:12px}
+</style></head><body>
+<header><h1><span>DKD</span> · Uprising Resource Pricer</h1><div class="sub">Dark Knight Disciples — SWG Uprising galaxy market calculator</div></header>
+<main>
+<aside>
+ <section class="panel" id="settings"><h2>Settings</h2>
+  <label for="base">Base price (all stats 1000)</label><input id="base" type="number" min="0" step="1">
+  <label for="mode">Scaling</label>
+  <select id="mode"><option value="linear">Linear — base × avg/1000</option><option value="power">Power curve — base × (avg/1000)^k</option></select>
+  <div id="kwrap"><label for="k">Exponent k (k&gt;1 rewards high stats)</label><input id="k" type="number" min="0.1" step="0.1"></div>
+  <label>Stats that count <span class="muted">(none checked = all the resource has)</span></label>
+  <div class="chips" id="statpick"></div>
+  <div style="margin-top:10px;display:flex;gap:6px"><button class="ghost" id="clearStats">All stats</button><button class="ghost" id="reset">Reset defaults</button></div>
+  <p class="muted">Saved in this browser (localStorage).</p>
+ </section>
+ <section class="panel"><h2>Manual calculator</h2>
+  <div class="grid" id="manual"></div>
+  <label for="qty">Quantity (units)</label><input id="qty" type="number" min="0" step="1" value="1000">
+  <div style="margin-top:12px" class="muted">Price per unit</div><div class="big" id="mPrice">—</div>
+  <div class="muted">Total</div><div class="big" id="mTotal">—</div>
+  <div class="muted" id="mAvg"></div>
+  <div style="margin-top:8px"><button class="ghost" id="mClear">Clear stats</button></div>
+  <p class="muted">Tip: click a row in the table to load its stats here.</p>
+ </section>
+</aside>
+<section class="panel"><h2>Current Uprising spawns</h2>
+ <div class="toolbar"><input id="q" placeholder="Search name, type, planet…"><select id="fgroup"><option value="">All categories</option></select><select id="fplanet"><option value="">All planets</option></select><input id="minp" type="number" placeholder="Min price"></div>
+ <div class="muted" id="meta" style="margin-bottom:8px">Loading…</div>
+ <div class="tablewrap"><table><thead><tr id="thead"></tr></thead><tbody id="tbody"></tbody></table></div>
+</section>
+</main>
+<footer>Data: <a href="https://galaxyharvester.net/" target="_blank" rel="noopener">Galaxy Harvester</a> (galaxy 161, SWG Uprising). Prices are guild guidance, not in-game data. · <a href="https://darkknightdisciples.com" target="_blank" rel="noopener">darkknightdisciples.com</a></footer>
+<script>
+const STATS=["OQ","CD","DR","FL","HR","MA","PE","SR","UT","CR","ER"],DEF={base:500,mode:"linear",k:1,stats:[]},KEY="dkd-swg-price-settings";
+let S=Object.assign({},DEF,JSON.parse(localStorage.getItem(KEY)||"{}")),DATA=[],sortKey="price",sortDir=-1;
+const $=id=>document.getElementById(id),save=()=>localStorage.setItem(KEY,JSON.stringify(S)),fmt=n=>n==null?"—":Math.round(n).toLocaleString();
+function price(stats){const keys=(S.stats.length?S.stats:STATS).filter(s=>stats[s]!=null&&stats[s]!=="");if(!keys.length)return{p:null,avg:null};
+ const avg=keys.reduce((a,s)=>a+ +stats[s],0)/keys.length,r=avg/1000,p=S.mode==="power"?S.base*Math.pow(r,S.k):S.base*r;return{p,avg}}
+function initUI(){$("base").value=S.base;$("mode").value=S.mode;$("k").value=S.k;$("kwrap").style.display=S.mode==="power"?"":"none";
+ $("statpick").innerHTML=STATS.map(s=>`<label class="chip"><input type="checkbox" value="${s}" ${S.stats.includes(s)?"checked":""}>${s}</label>`).join("")}
+$("manual").innerHTML=STATS.map(s=>`<div><label for="m${s}">${s}</label><input id="m${s}" type="number" min="1" max="1000"></div>`).join("");
+$("thead").innerHTML=[["name","Name"],["type","Type"],["planets","Planets"],...STATS.map(s=>[s,s]),["avg","Avg"],["price","Price/u"]].map(([k,l])=>`<th data-k="${k}">${l}</th>`).join("");
+function onSet(){S.base=+$("base").value||0;S.mode=$("mode").value;S.k=+$("k").value||1;S.stats=[...document.querySelectorAll("#statpick input:checked")].map(i=>i.value);$("kwrap").style.display=S.mode==="power"?"":"none";save();render();calc()}
+["base","mode","k"].forEach(i=>$(i).addEventListener("input",onSet));$("statpick").addEventListener("change",onSet);
+$("clearStats").onclick=()=>{S.stats=[];initUI();onSet()};$("reset").onclick=()=>{S=Object.assign({},DEF,{stats:[]});initUI();onSet()};
+function calc(){const st={};STATS.forEach(s=>{const v=$("m"+s).value;if(v!=="")st[s]=Math.min(1000,Math.max(0,+v))});const {p,avg}=price(st),q=+$("qty").value||0;
+ $("mPrice").textContent=p==null?"—":p.toLocaleString(undefined,{maximumFractionDigits:2})+" cr";$("mTotal").textContent=p==null?"—":fmt(p*q)+" cr";$("mAvg").textContent=avg==null?"Enter stats (only checked stats count, if any)":`Average of counted stats: ${avg.toFixed(1)}`}
+$("manual").addEventListener("input",calc);$("qty").addEventListener("input",calc);$("mClear").onclick=()=>{STATS.forEach(s=>$("m"+s).value="");calc()};
+["q","fgroup","fplanet","minp"].forEach(i=>$(i).addEventListener("input",render));
+$("thead").onclick=e=>{const k=e.target.dataset.k;if(!k)return;sortDir=sortKey===k?-sortDir:(["name","type","planets"].includes(k)?1:-1);sortKey=k;render()};
+function render(){const q=$("q").value.toLowerCase(),g=$("fgroup").value,pl=$("fplanet").value,mp=+$("minp").value||0;
+ let rows=DATA.map(r=>Object.assign({},r,price(r.stats))).filter(r=>(!q||(r.name+" "+r.type+" "+r.planets.join(" ")).toLowerCase().includes(q))&&(!g||r.group===g)&&(!pl||r.planets.includes(pl))&&(!mp||(r.p||0)>=mp));
+ const val=r=>sortKey==="price"?r.p:sortKey==="avg"?r.avg:sortKey==="planets"?r.planets.join(","):STATS.includes(sortKey)?r.stats[sortKey]:r[sortKey];
+ rows.sort((a,b)=>{const x=val(a),y=val(b);if(x==null&&y==null)return 0;if(x==null)return 1;if(y==null)return -1;return (typeof x==="string"?x.localeCompare(y):x-y)*sortDir});
+ document.querySelectorAll("th").forEach(th=>th.classList.toggle("sorted",th.dataset.k===sortKey));
+ const sel=S.stats.length?S.stats:STATS;
+ $("tbody").innerHTML=rows.map((r,i)=>`<tr data-i="${DATA.indexOf(r._o)}"><td><a href="https://galaxyharvester.net/resource.py/161/${encodeURIComponent(r.name)}" target="_blank" rel="noopener">${r.name}</a></td><td>${r.type}</td><td>${r.planets.join(", ")}</td>${STATS.map(s=>`<td class="n ${r.stats[s]!=null&&S.stats.includes(s)?"sel":"st"}">${r.stats[s]??""}</td>`).join("")}<td class="n">${r.avg==null?"—":r.avg.toFixed(0)}</td><td class="n price">${r.p==null?"—":r.p.toFixed(1)}</td></tr>`).join("");
+ $("meta").textContent=`${rows.length} of ${DATA.length} resources shown · data updated ${DATA.updated?new Date(DATA.updated).toLocaleString():"?"}`}
+$("tbody").onclick=e=>{const tr=e.target.closest("tr");if(!tr||e.target.tagName==="A")return;const r=DATA[+tr.dataset.i];STATS.forEach(s=>$("m"+s).value=r.stats[s]??"");document.querySelectorAll("tr.pick").forEach(t=>t.classList.remove("pick"));tr.classList.add("pick");calc()};
+initUI();calc();
+fetch("resources.json?t="+Date.now()).then(r=>r.json()).then(d=>{DATA=d.resources.map(r=>(r._o=r,r));DATA.updated=d.updated;
+ [...new Set(DATA.map(r=>r.group))].sort().forEach(g=>$("fgroup").add(new Option(g,g)));[...new Set(DATA.flatMap(r=>r.planets))].sort().forEach(p=>$("fplanet").add(new Option(p,p)));render()})
+ .catch(e=>$("meta").textContent="Failed to load resources.json: "+e);
+</script></body></html>

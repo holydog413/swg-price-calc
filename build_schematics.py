@@ -4,7 +4,7 @@ Schematics change rarely: run occasionally (e.g. weekly). Polite: ~1 request/sec
 Usage: python3 build_schematics.py [--profs 5,1] [--refresh] [--push]"""
 import re, os, sys, json, time, csv, html, subprocess, urllib.request, urllib.parse, datetime
 GALAXY = "161"; HERE = os.path.dirname(os.path.abspath(__file__)); UA = {"User-Agent": "dkd-swg-price-calc"}
-PROFS = {5:"Architect",1:"Artisan",8:"Chef",16:"Tailor",17:"Weaponsmith",6:"Armorsmith",11:"Droid Engineer",14:"Shipwright",7:"Bio-Engineer",10:"Doctor"}
+PROFS = {5:"Architect",1:"Artisan",3:"Medic",8:"Chef",16:"Tailor",17:"Weaponsmith",6:"Armorsmith",11:"Droid Engineer",14:"Shipwright",7:"Bio-Engineer",10:"Doctor"}
 STATN = {"Overall Quality":"OQ","Conductivity":"CD","Decay Resist":"DR","Flavor":"FL","Heat Resistance":"HR","Malleability":"MA",
          "Potential Energy":"PE","Shock Resistance":"SR","Unit Toughness":"UT","Cold Resistance":"CR","Entangle Resistance":"ER"}
 args = sys.argv[1:]
@@ -31,9 +31,9 @@ for pid in profs:
         if PROFS.get(pid, str(pid)) not in s["profs"]: s["profs"].append(PROFS.get(pid, str(pid)))
         if cat not in s["cats"]: s["cats"].append(cat)
 print(len(schems), "schematics listed", file=sys.stderr)
-for n, (sid, s) in enumerate(schems.items()):
+def parse(sid, s, n=0):
     page = get(f"https://galaxyharvester.net/schematics.py/{urllib.parse.quote(sid)}?galaxy={GALAXY}", sid + ".html")
-    if page is None: s["error"] = True; continue
+    if page is None: s["error"] = True; return
     i, j = page.find("<h3>Ingredients"), page.find("ingredient in the following")
     ing = []
     for row in re.findall(r"<tr><td>(\d+)</td>(.*?)(?=<tr>|</table>)", page[i:j], re.S):
@@ -51,6 +51,35 @@ for n, (sid, s) in enumerate(schems.items()):
     tot = sum(w.values()) or 1
     s.update(ingredients=ing, properties=props, weights={k: round(v / tot, 4) for k, v in w.items()})
     if n % 50 == 0: print(n, sid, file=sys.stderr)
+
+# Seed template data (GH open source): which component templates derive from which ("advanced" variants derive from the basic one,
+# so a slot calling for the basic template accepts the advanced one too).
+SEEDT = {}
+for line in open("/workspace/gh-src/database/seedData/tSchematic.txt", encoding="utf-8", errors="replace"):
+    f = line.rstrip("\n").split("\t")
+    if len(f) >= 11: SEEDT[f[0]] = (f[9], f[10])
+for n, (sid, s) in enumerate(list(schems.items())): parse(sid, s, n)
+# fetch referenced components that are missing, plus their derived (advanced) variants, a few levels deep
+for _ in range(4):
+    want = set()
+    for s in list(schems.values()):
+        for ing in s.get("ingredients", []):
+            if ing["kind"] == "comp":
+                want.add(ing["id"])
+                for k, (obj, base) in SEEDT.items():
+                    if ing["id"] in SEEDT and base == SEEDT[ing["id"]][0]: want.add(k)
+    want -= set(schems)
+    if not want: break
+    for sid in sorted(want):
+        schems[sid] = {"id": sid, "name": sid, "profs": ["(component)"], "cats": ["Components"]}
+        pg = get(f"https://galaxyharvester.net/schematics.py/{urllib.parse.quote(sid)}?galaxy={GALAXY}", sid + ".html")
+        m = pg and re.search(r"<h2[^>]*>(.*?)<div", pg, re.S)
+        if m: schems[sid]["name"] = txt(m.group(1))
+        parse(sid, schems[sid])
+        if not schems[sid].get("ingredients"): schems[sid]["error"] = True
+for sid, s in schems.items():
+    alts = [k for k, (obj, base) in SEEDT.items() if sid in SEEDT and base == SEEDT[sid][0] and k.endswith("_advanced") and k in schems and not schems[k].get("error")]
+    if alts: s["advanced"] = alts
 # resource group -> member types (GH open-source seed data), so the page can match spawns to slots
 SEED = "/workspace/gh-src/database/seedData"; groups = {}
 for f in ("typegroup.csv", "typegroupNewPlanet.csv"):

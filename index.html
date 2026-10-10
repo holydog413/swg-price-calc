@@ -124,39 +124,43 @@ fetch("resources.json?t="+Date.now()).then(r=>r.json()).then(d=>{DATA=d.resource
  .catch(e=>$("meta").textContent="Failed to load resources.json: "+e);
 
 // ---------- Schematics ----------
-let SCH=null,SCHMAP={},CUR=null;const SKEY="dkd-swg-schem";let SS=Object.assign({markup:25,count:1,picks:{},comp:{}},JSON.parse(localStorage.getItem(SKEY)||"{}"));
+let SCH=null,SCHMAP={},CUR=null;const SKEY="dkd-swg-schem";let SS=Object.assign({markup:25,count:1,picks:{},comp:{},adv:{}},JSON.parse(localStorage.getItem(SKEY)||"{}"));
 const ssave=()=>localStorage.setItem(SKEY,JSON.stringify(SS)),esc=t=>String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x===b));["resTab","schTab"].forEach(t=>$(t).style.display=t===b.dataset.t?"":"none")});
 function cands(slot){const types=new Set(SCH.groups[slot]||[slot]);return DATA.filter(r=>types.has(r.rt))}
 function score(r,w){let s=0,t=0;for(const k in w){if(r.stats[k]!=null){s+=w[k]*r.stats[k]}t+=w[k]}return t?s/t:0}
 function best(slot,w){let b=null,bs=-1;for(const r of cands(slot)){const sc=score(r,w);if(sc>bs){bs=sc;b=r}}return b}
 // cost of one crafted unit of a schematic; auto-picks best spawn per slot; components recurse (depth-limited) unless overridden
-function cost(sc,depth=0,useUser=true){let total=0,missing=0;for(const [i,ing] of sc.ingredients.entries()){
+const advOn=sc=>SS.adv&&SS.adv[sc.id]!=null?SS.adv[sc.id]:sc.profs.includes("Doctor");
+const hasAdv=sc=>sc.ingredients.some(i=>i.kind==="comp"&&SCHMAP[i.id]&&SCHMAP[i.id].advanced);
+// slot uses the advanced variant (derived template) when enabled and the data has one
+function slotComp(ing,adv){const b=SCHMAP[ing.id];if(adv&&b&&b.advanced&&SCHMAP[b.advanced[0]])return {id:b.advanced[0],name:SCHMAP[b.advanced[0]].name,adv:true};return {id:ing.id,name:ing.name,adv:false}}
+function cost(sc,depth=0,useUser=true,adv=null){if(adv==null)adv=advOn(sc);let total=0,missing=0;for(const [i,ing0] of sc.ingredients.entries()){const ing=ing0.kind==="comp"?Object.assign({},ing0,slotComp(ing0,adv)):ing0;
   if(ing.kind==="res"){let r=null;const pk=useUser&&SS.picks[sc.id+"#"+i];if(pk)r=DATA.find(x=>x.name===pk&&cands(ing.id).includes(x));if(!r)r=best(ing.id,sc.weights);const p=r?price(r.stats).p:null;if(p==null)missing++;else total+=p*ing.qty}
-  else{const ov=SS.comp[ing.id];if(ov!=null&&ov!==""){total+=+ov*ing.qty}else if(SCHMAP[ing.id]&&depth<4){const c=cost(SCHMAP[ing.id],depth+1,false);total+=c.total*ing.qty;missing+=c.missing}else missing++}}
+  else{const ov=SS.comp[ing.id];if(ov!=null&&ov!==""){total+=+ov*ing.qty}else if(SCHMAP[ing.id]&&depth<4){const c=cost(SCHMAP[ing.id],depth+1,false,adv);total+=c.total*ing.qty;missing+=c.missing}else missing++}}
  return{total,missing}}
 function renderList(){const q=$("sq").value.toLowerCase(),pf=$("sprof").value;const L=SCH.schematics.filter(s=>(!q||s.name.toLowerCase().includes(q)||s.cats.join(" ").toLowerCase().includes(q))&&(!pf||s.profs.includes(pf)));
  $("smeta").textContent=`${L.length} of ${SCH.schematics.length} schematics`;
  $("slist").innerHTML=L.slice(0,600).map(s=>`<div data-id="${esc(s.id)}" class="${CUR===s?"on":""}">${esc(s.name)}<small>${esc(s.profs.join(", "))} · ${esc(s.cats.join(", "))}</small></div>`).join("")}
 function renderDetail(){const sc=CUR;if(!sc)return;const w=sc.weights,wtxt=Object.keys(w).length?Object.entries(w).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<span class="wt">${k} ${(v*100).toFixed(0)}%</span>`).join(""):'<span class="muted">none (no experimental stats)</span>';
- let rows="",total=0,missing=0;
- sc.ingredients.forEach((ing,i)=>{
+ let rows="",total=0,missing=0;const adv=advOn(sc);
+ sc.ingredients.forEach((ing0,i)=>{const ing=ing0.kind==="comp"?Object.assign({},ing0,slotComp(ing0,adv)):ing0;
   if(ing.kind==="res"){const C=cands(ing.id).map(r=>({r,sc:score(r,w),p:price(r.stats).p})).sort((a,b)=>b.sc-a.sc);const key=sc.id+"#"+i,pk=SS.picks[key];
    let sel=C.find(c=>c.r.name===pk)||C[0];const p=sel?sel.p:null;if(p==null)missing++;else total+=p*ing.qty;
    rows+=`<tr><td class="n">${ing.qty}</td><td>${esc(ing.name)}</td><td>${C.length?`<select data-k="${esc(key)}"><option value="">Auto: best (${esc(C[0].r.name)})</option>${C.map(c=>`<option value="${esc(c.r.name)}" ${c.r.name===pk?"selected":""}>${esc(c.r.name)} — ${esc(c.r.type)} · score ${c.sc.toFixed(0)} · ${c.p==null?"—":c.p.toFixed(1)}cr</option>`).join("")}</select>`:'<span class="warn">No current spawn</span>'}</td><td class="n">${sel?sel.sc.toFixed(0):"—"}</td><td class="n">${p==null?"—":p.toFixed(1)}</td><td class="n price">${p==null?"—":fmt(p*ing.qty)}</td></tr>`}
-  else{const sub=SCHMAP[ing.id],ov=SS.comp[ing.id];let unit=null,note="";if(ov!=null&&ov!==""){unit=+ov;note="manual"}else if(sub){const c=cost(sub,1,false);unit=c.total;note=c.missing?`auto (${c.missing} slot(s) unpriced)`:"auto, best spawns"}
+  else{const sub=SCHMAP[ing.id],ov=SS.comp[ing.id];let unit=null,note="";if(ov!=null&&ov!==""){unit=+ov;note="manual"}else if(sub){const c=cost(sub,1,false,adv);unit=c.total;note=c.missing?`auto (${c.missing} slot(s) unpriced)`:"auto, best spawns"}
    if(unit==null)missing++;else total+=unit*ing.qty;
-   rows+=`<tr><td class="n">${ing.qty}</td><td>${sub?`<a href="#" data-go="${esc(ing.id)}">${esc(ing.name)}</a>`:esc(ing.name)} <span class="muted">(component)</span></td><td><input type="number" min="0" step="1" placeholder="${unit==null?"enter price":unit.toFixed(0)}" value="${ov??""}" data-c="${esc(ing.id)}"> <span class="muted">${note||"no recipe data — enter cost/unit"}</span></td><td></td><td class="n">${unit==null?"—":unit.toFixed(1)}</td><td class="n price">${unit==null?"—":fmt(unit*ing.qty)}</td></tr>`}});
+   rows+=`<tr><td class="n">${ing.qty}</td><td>${sub?`<a href="#" data-go="${esc(ing.id)}">${esc(ing.name)}</a>`:esc(ing.name)} <span class="muted">(${ing.adv?"advanced component":"component"})</span></td><td><input type="number" min="0" step="1" placeholder="${unit==null?"enter price":unit.toFixed(0)}" value="${ov??""}" data-c="${esc(ing.id)}"> <span class="muted">${note||"no recipe data — enter cost/unit"}</span></td><td></td><td class="n">${unit==null?"—":unit.toFixed(1)}</td><td class="n price">${unit==null?"—":fmt(unit*ing.qty)}</td></tr>`}});
  const n=+SS.count||1,mk=+SS.markup||0,all=total*n,sell=all*(1+mk/100);
  $("sdetail").innerHTML=`<h2 style="border:none;padding:0;font-size:18px">${esc(sc.name)}</h2><div class="muted">${esc(sc.profs.join(", "))} · ${esc(sc.cats.join(", "))} · <a href="https://galaxyharvester.net/schematics.py/${encodeURIComponent(sc.id)}?galaxy=161" target="_blank" rel="noopener">view on Galaxy Harvester</a></div>
  <div style="margin:8px 0">Experimental stat weights: ${wtxt}</div>
- <div style="margin:6px 0"><button class="ghost" id="autoAll">Auto-pick best for all slots</button></div>
+ <div style="margin:6px 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap"><button class="ghost" id="autoAll">Auto-pick best for all slots</button>${hasAdv(sc)?`<label class="chip" style="font-size:13px"><input type="checkbox" id="advT" ${adv?"checked":""}> Use advanced components</label>`:""}</div>
  <div class="tablewrap"><table class="ing"><thead><tr><th>Qty</th><th>Slot</th><th>Resource</th><th>Score</th><th>Price/u</th><th>Cost</th></tr></thead><tbody>${rows}</tbody></table></div>
  <div class="grid" style="grid-template-columns:repeat(2,minmax(0,200px));margin-top:10px"><div><label>Items to craft</label><input id="scount" type="number" min="1" value="${n}"></div><div><label>Markup %</label><input id="smk" type="number" step="1" value="${mk}"></div></div>
  <div class="tot"><div><div class="muted">Resource cost / item</div><div class="big">${fmt(total)} cr</div></div><div><div class="muted">Total cost (${n})</div><div class="big">${fmt(all)} cr</div></div><div><div class="muted">Suggested sell (+${mk}%)</div><div class="big">${fmt(sell)} cr</div><div class="muted">${fmt(sell/n)} cr each</div></div></div>
  ${missing?`<p class="warn">${missing} slot(s) have no current spawn or price and are left out of the total.</p>`:""}
  <p class="muted">Score = schematic-weighted average of the spawn's stats. Prices use your Settings (base, scaling, counted stats). Picks, component prices and markup are saved in this browser.</p>`}
-$("sdetail").addEventListener("change",e=>{const t=e.target;if(t.dataset.k!=null){if(t.value)SS.picks[t.dataset.k]=t.value;else delete SS.picks[t.dataset.k]}else if(t.dataset.c!=null){if(t.value==="")delete SS.comp[t.dataset.c];else SS.comp[t.dataset.c]=+t.value}else if(t.id==="scount")SS.count=+t.value||1;else if(t.id==="smk")SS.markup=+t.value||0;else return;ssave();renderDetail()});
+$("sdetail").addEventListener("change",e=>{const t=e.target;if(t.dataset.k!=null){if(t.value)SS.picks[t.dataset.k]=t.value;else delete SS.picks[t.dataset.k]}else if(t.dataset.c!=null){if(t.value==="")delete SS.comp[t.dataset.c];else SS.comp[t.dataset.c]=+t.value}else if(t.id==="scount")SS.count=+t.value||1;else if(t.id==="smk")SS.markup=+t.value||0;else if(t.id==="advT"){SS.adv=SS.adv||{};SS.adv[CUR.id]=t.checked}else return;ssave();renderDetail()});
 $("sdetail").addEventListener("click",e=>{if(e.target.id==="autoAll"){Object.keys(SS.picks).filter(k=>k.startsWith(CUR.id+"#")).forEach(k=>delete SS.picks[k]);ssave();renderDetail()}const g=e.target.dataset&&e.target.dataset.go;if(g){e.preventDefault();CUR=SCHMAP[g];renderList();renderDetail()}});
 $("slist").onclick=e=>{const d=e.target.closest("[data-id]");if(!d)return;CUR=SCHMAP[d.dataset.id];renderList();renderDetail()};
 ["sq","sprof"].forEach(i=>$(i).addEventListener("input",renderList));

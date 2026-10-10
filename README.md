@@ -10,3 +10,6 @@ Pricing: price = base × (avg of counted stats / 1000), base 22 by default, cali
 
 ## Price lock
 The base price fields (top box and Settings) and Reset defaults are PIN-locked. `index.html` contains only a random salt and SHA-256(salt + PIN), never the PIN. A correct PIN unlocks for the browser session (sessionStorage). This is a casual lock, not real security: a 4-digit PIN can be brute-forced from the hash, and the static page's code and localStorage can be edited by anyone.
+
+## Advanced components
+`build_schematics.py` also scrapes Medic component schematics and fetches any referenced component missing from the profession lists. A slot that calls for a basic component also accepts its "_advanced" variant when Galaxy Harvester's open-source template data shows the advanced template derives from the basic one. The Schematics tab has a "Use advanced components" toggle (default ON for Doctor schematics, OFF otherwise); advanced components are priced through their own recipes.

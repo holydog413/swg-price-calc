@@ -16,3 +16,6 @@ The base price fields (top box and Settings) and Reset defaults are PIN-locked. 
 
 ## Stock tab
 Track inventory on hand: item (autocomplete from current resources and schematics, or free text), type, quantity, purchase CPU, sold CPU / qty sold, notes. Calculator value per unit comes from the pricing settings (resource: spawn price; crafted item: schematic suggested sell per item). Totals show inventory at cost, at calculator price, and realized profit. Saved in localStorage, with CSV export/import. No PIN.
+
+## Game-synced inventory
+`inv_ingest.py` reads Discord messages relayed from in-game chat by "Uprising Bot" (only `rover: inv ...`), dedupes by message id (`inv_seen.json`, kept on the box, not committed), updates `inventory.json` and pushes with `--push`. Input: JSON lines/array of `{"id","author","content","timestamp"}` or TSV `id<TAB>timestamp<TAB>author<TAB>content`. The Stock tab shows these items read-only under "Synced from game".

@@ -1,3 +1,5 @@
 .schem_cache/
 preview.png
 build.log
+inv_seen.json
+inv_inbox/

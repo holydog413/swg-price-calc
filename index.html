@@ -97,6 +97,10 @@ footer{text-align:center;color:#6f625e;padding:20px;font-size:12px}
  </div>
  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><button class="ghost" id="expCsv">Export CSV</button><button class="ghost" id="impCsvBtn">Import CSV</button><input type="file" id="impCsv" accept=".csv,text/csv" style="display:none"><span class="muted" id="stockMsg"></span></div>
  <div class="tablewrap"><table class="stk"><thead><tr><th>Item</th><th>Type</th><th>Qty on hand</th><th>Purchase CPU</th><th>Total cost</th><th>Calc value/u</th><th>Sold CPU</th><th>Qty sold</th><th>Profit/u</th><th>Total profit</th><th>Notes</th><th></th></tr></thead><tbody id="stockBody"></tbody><tfoot id="stockFoot"></tfoot></table></div>
+ <h2 style="margin-top:22px">Synced from game</h2>
+ <div class="muted" id="syncMeta" style="margin-bottom:6px">Loading inventory.json…</div>
+ <div class="tablewrap"><table class="stk"><thead><tr><th>Item</th><th>Type</th><th>On hand</th><th>Avg CPU</th><th>Total cost</th><th>Calc value/u</th><th>Value at calc</th><th>Qty sold</th><th>Avg sold</th><th>Realized profit</th><th>Updated</th></tr></thead><tbody id="syncBody"></tbody><tfoot id="syncFoot"></tfoot></table></div>
+ <p class="muted">Read-only. Updated from in-game chat commands (<code>inv +200k name @5</code>, <code>inv -10k name</code>, <code>inv sold 50k name @8</code>) relayed to Discord and ingested into inventory.json.</p>
  <p class="muted">Calc value/u comes from your pricing settings: a resource uses the current spawn's price, and a crafted item uses its schematic's suggested sell price per item (best spawns, components and markup from the Schematics tab). Profit/u = sold CPU − purchase CPU; total profit = profit/u × qty sold. Saved in this browser; use Export CSV for backups.</p>
 </div>
 </section>
@@ -225,4 +229,14 @@ $("impCsv").onchange=async e=>{const file=e.target.files[0];if(!file)return;cons
  const replace=STOCK.length&&confirm(`Import ${add.length} rows. OK = replace current ${STOCK.length} rows, Cancel = append.`);STOCK=replace?add:STOCK.concat(add);stSave();renderStock();$("stockMsg").textContent=`Imported ${add.length} rows.`;e.target.value=""};
 const _rd=renderDetail;renderDetail=function(){_rd();renderStock()};const _os2=onSet;onSet=function(src){_os2(src);renderStock()};
 (function waitStock(){if(DATA.length&&SCH){fillItems();renderStock()}else{renderStock();setTimeout(waitStock,200)}})();
+
+// ---------- Synced inventory (inventory.json) ----------
+let INVJ=null;fetch("inventory.json?t="+Date.now()).then(r=>r.ok?r.json():{items:[]}).then(d=>{INVJ=d;renderSync()}).catch(()=>{INVJ={items:[]};renderSync()});
+function renderSync(){if(!INVJ)return;let tc=0,tv=0,tp=0;const I=INVJ.items||[];
+ $("syncMeta").textContent=I.length?`${I.length} item(s) · inventory.json updated ${INVJ.updated?new Date(INVJ.updated).toLocaleString():"?"}`:"No game-tracked items yet.";
+ $("syncBody").innerHTML=I.map(it=>{const cv=calcVal(it),c=it.cpu,q=it.qty||0,tot=c==null?null:c*q,rp=it.qsold?it.revenue-it.costSold:null,as=it.qsold?it.revenue/it.qsold:null;
+  if(tot!=null)tc+=tot;if(cv!=null)tv+=cv*q;if(rp!=null)tp+=rp;
+  return `<tr><td>${esc(it.item)}${it.resType?`<div class="muted">${esc(it.resType)}</div>`:""}</td><td>${it.type==="resource"?"Resource":it.type==="crafted"?"Crafted item":"Other"}</td><td class="n">${fmt(q)}</td><td class="n">${f2(c)}</td><td class="n">${f2(tot)}</td><td class="n price">${f2(cv)}</td><td class="n">${cv==null?"—":fmt(cv*q)}</td><td class="n">${fmt(it.qsold||0)}</td><td class="n">${f2(as)}</td><td class="n ${rp==null?"":rp>=0?"pos":"neg"}">${f2(rp)}</td><td class="muted">${it.updated?esc(new Date(it.updated).toLocaleString()):""}</td></tr>`}).join("");
+ $("syncFoot").innerHTML=I.length?`<tr><td colspan="4">Totals</td><td class="n">${fmt(tc)}</td><td></td><td class="n price">${fmt(tv)}</td><td colspan="2">Realized profit:</td><td class="n ${tp>=0?"pos":"neg"}">${fmt(tp)}</td><td></td></tr>`:""}
+const _rs=renderStock;renderStock=function(){_rs();renderSync()};
 </script></body></html>

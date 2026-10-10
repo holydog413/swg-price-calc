@@ -41,14 +41,15 @@ td.price{color:var(--red-hi);font-weight:600}a{color:#ff6a6f}
 .topbase{max-width:1300px;margin:14px auto 0;padding:12px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:linear-gradient(90deg,rgba(192,38,45,.18),rgba(23,17,18,.9));border:1px solid var(--red-deep);border-radius:6px}
 .topbase label{margin:0;font-family:var(--display);font-size:14px;color:#f3e9e6;letter-spacing:.08em}.topbase input{width:140px;font-size:20px;font-family:var(--display);color:var(--red-hi);text-align:right}
 @media(max-width:1336px){.topbase{margin:14px 18px 0}}
+.lockbtn{padding:5px 10px;font-size:12px}.lockmsg{color:#ff6a6f;font-size:12px}input[readonly]{opacity:.75;cursor:not-allowed}
 footer{text-align:center;color:#6f625e;padding:20px;font-size:12px}
 </style></head><body>
 <header><h1><span>DKD</span> · Uprising Resource Pricer</h1><div class="sub">Dark Knight Disciples — SWG Uprising galaxy market calculator</div></header>
-<div class="topbase"><label for="topBase">Credits per unit (max stats)</label><input id="topBase" type="number" min="0" step="1"><span class="muted">Price at 1000 in every counted stat. Same as Base price in Settings; all prices update live.</span></div>
+<div class="topbase"><label for="topBase">Credits per unit (max stats)</label><input id="topBase" type="number" min="0" step="1"><button class="ghost lockbtn" id="unlockTop" type="button">🔒 Unlock</button><span class="lockmsg" id="lockMsgTop"></span><span class="muted">Price at 1000 in every counted stat. Same as Base price in Settings; all prices update live.</span></div>
 <main>
 <aside>
  <section class="panel" id="settings"><h2>Settings</h2>
-  <label for="base">Base price (all stats 1000)</label><input id="base" type="number" min="0" step="1">
+  <label for="base">Base price (all stats 1000) <button class="ghost lockbtn" id="unlockSet" type="button">🔒 Unlock</button> <span class="lockmsg" id="lockMsgSet"></span></label><input id="base" type="number" min="0" step="1">
   <label for="mode">Scaling</label>
   <select id="mode"><option value="linear">Linear — base × avg/1000</option><option value="power">Power curve — base × (avg/1000)^k</option></select>
   <div id="kwrap"><label for="k">Exponent k (k&gt;1 rewards high stats)</label><input id="k" type="number" min="0.1" step="0.1"></div>
@@ -93,7 +94,15 @@ $("manual").innerHTML=STATS.map(s=>`<div><label for="m${s}">${s}</label><input i
 $("thead").innerHTML=[["name","Name"],["type","Type"],["planets","Planets"],...STATS.map(s=>[s,s]),["avg","Avg"],["price","Price/u"]].map(([k,l])=>`<th data-k="${k}">${l}</th>`).join("");
 function onSet(src){if(src==="top")$("base").value=$("topBase").value;else $("topBase").value=$("base").value;S.base=+$("base").value||0;S.mode=$("mode").value;S.k=+$("k").value||1;S.stats=[...document.querySelectorAll("#statpick input:checked")].map(i=>i.value);$("kwrap").style.display=S.mode==="power"?"":"none";save();render();calc()}
 ["base","mode","k"].forEach(i=>$(i).addEventListener("input",()=>onSet()));$("topBase").addEventListener("input",()=>onSet("top"));$("statpick").addEventListener("change",()=>onSet());
-$("clearStats").onclick=()=>{S.stats=[];initUI();onSet()};$("reset").onclick=()=>{S=Object.assign({},DEF,{stats:[]});initUI();onSet()};
+const PIN_SALT="1f58b50f52ee4422c1b02f068d701f56",PIN_HASH="572050e9ee1d2e73adc40e09cb18077ee4fb623bd02c2db6c07b36c4e53661b6",UKEY="dkd-swg-price-unlocked";
+const unlocked=()=>sessionStorage.getItem(UKEY)==="1";
+function applyLock(){const u=unlocked();["base","topBase"].forEach(i=>$(i).readOnly=!u);["unlockTop","unlockSet"].forEach(i=>{$(i).textContent=u?"🔓 Unlocked":"🔒 Unlock";$(i).disabled=u})}
+async function sha(t){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
+async function askUnlock(msgId){if(unlocked())return true;const pin=prompt("Enter the 4-digit PIN to change the price");if(pin==null)return false;
+ const ok=(await sha(PIN_SALT+pin.trim()))===PIN_HASH;["lockMsgTop","lockMsgSet"].forEach(i=>$(i).textContent="");
+ if(ok){sessionStorage.setItem(UKEY,"1");applyLock();return true}$(msgId).textContent="Incorrect PIN";return false}
+$("unlockTop").onclick=()=>askUnlock("lockMsgTop");$("unlockSet").onclick=()=>askUnlock("lockMsgSet");
+$("clearStats").onclick=()=>{S.stats=[];initUI();onSet()};$("reset").onclick=async()=>{if(!(await askUnlock("lockMsgSet")))return;S=Object.assign({},DEF,{stats:[]});initUI();onSet()};
 function calc(){const st={};STATS.forEach(s=>{const v=$("m"+s).value;if(v!=="")st[s]=Math.min(1000,Math.max(0,+v))});const {p,avg}=price(st),q=+$("qty").value||0;
  $("mPrice").textContent=p==null?"—":p.toLocaleString(undefined,{maximumFractionDigits:2})+" cr";$("mTotal").textContent=p==null?"—":fmt(p*q)+" cr";$("mAvg").textContent=avg==null?"Enter stats (only checked stats count, if any)":`Average of counted stats: ${avg.toFixed(1)}`}
 $("manual").addEventListener("input",calc);$("qty").addEventListener("input",calc);$("mClear").onclick=()=>{STATS.forEach(s=>$("m"+s).value="");calc()};
@@ -108,7 +117,7 @@ function render(){const q=$("q").value.toLowerCase(),g=$("fgroup").value,pl=$("f
  $("tbody").innerHTML=rows.map((r,i)=>`<tr data-i="${DATA.indexOf(r._o)}"><td><a href="https://galaxyharvester.net/resource.py/161/${encodeURIComponent(r.name)}" target="_blank" rel="noopener">${r.name}</a></td><td>${r.type}</td><td>${r.planets.join(", ")}</td>${STATS.map(s=>`<td class="n ${r.stats[s]!=null&&S.stats.includes(s)?"sel":"st"}">${r.stats[s]??""}</td>`).join("")}<td class="n">${r.avg==null?"—":r.avg.toFixed(0)}</td><td class="n price">${r.p==null?"—":r.p.toFixed(1)}</td></tr>`).join("");
  $("meta").textContent=`${rows.length} of ${DATA.length} resources shown · data updated ${DATA.updated?new Date(DATA.updated).toLocaleString():"?"}`}
 $("tbody").onclick=e=>{const tr=e.target.closest("tr");if(!tr||e.target.tagName==="A")return;const r=DATA[+tr.dataset.i];STATS.forEach(s=>$("m"+s).value=r.stats[s]??"");document.querySelectorAll("tr.pick").forEach(t=>t.classList.remove("pick"));tr.classList.add("pick");calc()};
-initUI();calc();
+initUI();applyLock();calc();
 fetch("resources.json?t="+Date.now()).then(r=>r.json()).then(d=>{DATA=d.resources.map(r=>(r._o=r,r));DATA.updated=d.updated;
  [...new Set(DATA.map(r=>r.group))].sort().forEach(g=>$("fgroup").add(new Option(g,g)));[...new Set(DATA.flatMap(r=>r.planets))].sort().forEach(p=>$("fplanet").add(new Option(p,p)));render()})
  .catch(e=>$("meta").textContent="Failed to load resources.json: "+e);

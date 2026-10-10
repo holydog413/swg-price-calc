@@ -7,3 +7,6 @@ Pricing: price = base × (avg of counted stats / 1000), base 22 by default, cali
 
 ## Schematics tab
 `schematics.json` is scraped from Galaxy Harvester's public schematic pages for galaxy 161 (ingredients, quantities, experimental stat weights) by `build_schematics.py` (~1,400 pages, ~1 req/s, cached in `.schem_cache/`). Schematics rarely change, so run it occasionally: `python3 build_schematics.py --refresh --push`. Resource group → type mapping comes from Galaxy Harvester's open-source seed data.
+
+## Price lock
+The base price fields (top box and Settings) and Reset defaults are PIN-locked. `index.html` contains only a random salt and SHA-256(salt + PIN), never the PIN. A correct PIN unlocks for the browser session (sessionStorage). This is a casual lock, not real security: a 4-digit PIN can be brute-forced from the hash, and the static page's code and localStorage can be edited by anyone.

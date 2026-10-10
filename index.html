@@ -42,6 +42,10 @@ td.price{color:var(--red-hi);font-weight:600}a{color:#ff6a6f}
 .topbase label{margin:0;font-family:var(--display);font-size:14px;color:#f3e9e6;letter-spacing:.08em}.topbase input{width:140px;font-size:20px;font-family:var(--display);color:var(--red-hi);text-align:right}
 @media(max-width:1336px){.topbase{margin:14px 18px 0}}
 .lockbtn{padding:5px 10px;font-size:12px}.lockmsg{color:#ff6a6f;font-size:12px}input[readonly]{opacity:.75;cursor:not-allowed}
+.stk input,.stk select{padding:4px 6px;font-size:12px}.stk td{padding:4px}.stk .w60{width:70px}.stk .w90{width:95px}.stk .w160{width:170px}
+.stk tfoot td{font-weight:600;border-top:1px solid var(--red-deep);background:#1a1213}.pos{color:#7fd88a}.neg{color:#ff6a6f}
+.addrow{display:grid;grid-template-columns:2fr 1fr repeat(4,1fr) 2fr auto;gap:6px;align-items:end;margin-bottom:10px}@media(max-width:1100px){.addrow{grid-template-columns:1fr 1fr}}
+.addrow label{margin:0 0 2px}
 footer{text-align:center;color:#6f625e;padding:20px;font-size:12px}
 </style></head><body>
 <header><h1><span>DKD</span> · Uprising Resource Pricer</h1><div class="sub">Dark Knight Disciples — SWG Uprising galaxy market calculator</div></header>
@@ -68,7 +72,7 @@ footer{text-align:center;color:#6f625e;padding:20px;font-size:12px}
   <p class="muted">Tip: click a row in the table to load its stats here.</p>
  </section>
 </aside>
-<section class="panel"><div class="tabs"><button class="tab on" data-t="resTab">Resources</button><button class="tab" data-t="schTab">Schematics</button></div>
+<section class="panel"><div class="tabs"><button class="tab on" data-t="resTab">Resources</button><button class="tab" data-t="schTab">Schematics</button><button class="tab" data-t="stockTab">Stock</button></div>
 <div id="resTab"><h2>Current Uprising spawns</h2>
  <div class="toolbar"><input id="q" placeholder="Search name, type, planet…"><select id="fgroup"><option value="">All categories</option></select><select id="fplanet"><option value="">All planets</option></select><input id="minp" type="number" placeholder="Min price"></div>
  <div class="muted" id="meta" style="margin-bottom:8px">Loading…</div>
@@ -78,6 +82,22 @@ footer{text-align:center;color:#6f625e;padding:20px;font-size:12px}
   <input id="sq" placeholder="Search schematics…" style="margin-bottom:6px"><select id="sprof" style="margin-bottom:6px"><option value="">All professions</option></select>
   <div class="muted" id="smeta" style="margin-bottom:6px">Loading…</div><div class="slist" id="slist"></div></div>
   <div id="sdetail"><p class="muted">Pick a schematic on the left.</p></div></div>
+</div>
+<div id="stockTab" style="display:none"><h2>Stock on hand</h2>
+ <datalist id="itemList"></datalist>
+ <div class="addrow">
+  <div><label>Item</label><input id="nItem" list="itemList" placeholder="Resource, schematic or free text"></div>
+  <div><label>Type</label><select id="nType"><option value="resource">Resource</option><option value="crafted">Crafted item</option><option value="other">Other</option></select></div>
+  <div><label>Qty on hand</label><input id="nQty" type="number" min="0" step="1"></div>
+  <div><label>Purchase CPU</label><input id="nCpu" type="number" min="0" step="0.01"></div>
+  <div><label>Sold CPU</label><input id="nSold" type="number" min="0" step="0.01" placeholder="optional"></div>
+  <div><label>Qty sold</label><input id="nQs" type="number" min="0" step="1" placeholder="optional"></div>
+  <div><label>Notes</label><input id="nNotes"></div>
+  <div><button id="addStock">Add</button></div>
+ </div>
+ <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><button class="ghost" id="expCsv">Export CSV</button><button class="ghost" id="impCsvBtn">Import CSV</button><input type="file" id="impCsv" accept=".csv,text/csv" style="display:none"><span class="muted" id="stockMsg"></span></div>
+ <div class="tablewrap"><table class="stk"><thead><tr><th>Item</th><th>Type</th><th>Qty on hand</th><th>Purchase CPU</th><th>Total cost</th><th>Calc value/u</th><th>Sold CPU</th><th>Qty sold</th><th>Profit/u</th><th>Total profit</th><th>Notes</th><th></th></tr></thead><tbody id="stockBody"></tbody><tfoot id="stockFoot"></tfoot></table></div>
+ <p class="muted">Calc value/u comes from your pricing settings: a resource uses the current spawn's price, and a crafted item uses its schematic's suggested sell price per item (best spawns, components and markup from the Schematics tab). Profit/u = sold CPU − purchase CPU; total profit = profit/u × qty sold. Saved in this browser; use Export CSV for backups.</p>
 </div>
 </section>
 </main>
@@ -126,7 +146,7 @@ fetch("resources.json?t="+Date.now()).then(r=>r.json()).then(d=>{DATA=d.resource
 // ---------- Schematics ----------
 let SCH=null,SCHMAP={},CUR=null;const SKEY="dkd-swg-schem";let SS=Object.assign({markup:25,count:1,picks:{},comp:{},adv:{}},JSON.parse(localStorage.getItem(SKEY)||"{}"));
 const ssave=()=>localStorage.setItem(SKEY,JSON.stringify(SS)),esc=t=>String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x===b));["resTab","schTab"].forEach(t=>$(t).style.display=t===b.dataset.t?"":"none")});
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x===b));["resTab","schTab","stockTab"].forEach(t=>$(t).style.display=t===b.dataset.t?"":"none")});
 function cands(slot){const types=new Set(SCH.groups[slot]||[slot]);return DATA.filter(r=>types.has(r.rt))}
 function score(r,w){let s=0,t=0;for(const k in w){if(r.stats[k]!=null){s+=w[k]*r.stats[k]}t+=w[k]}return t?s/t:0}
 function best(slot,w){let b=null,bs=-1;for(const r of cands(slot)){const sc=score(r,w);if(sc>bs){bs=sc;b=r}}return b}
@@ -167,4 +187,42 @@ $("slist").onclick=e=>{const d=e.target.closest("[data-id]");if(!d)return;CUR=SC
 const _onSet=onSet;onSet=function(src){_onSet(src);if(CUR)renderDetail()};
 Promise.all([fetch("schematics.json?t="+Date.now()).then(r=>r.json()),new Promise(res=>{const t=setInterval(()=>{if(DATA.length){clearInterval(t);res()}},100)})]).then(([d])=>{SCH=d;d.schematics.forEach(s=>SCHMAP[s.id]=s);
  [...new Set(d.schematics.flatMap(s=>s.profs))].sort().forEach(p=>$("sprof").add(new Option(p,p)));renderList()}).catch(e=>$("smeta").textContent="Failed to load schematics.json: "+e);
+
+// ---------- Stock ----------
+const STKEY="dkd-swg-stock";let STOCK=JSON.parse(localStorage.getItem(STKEY)||"[]");const stSave=()=>localStorage.setItem(STKEY,JSON.stringify(STOCK));
+const num=v=>v===""||v==null||isNaN(+v)?null:+v,f2=n=>n==null?"—":(+n).toLocaleString(undefined,{maximumFractionDigits:2});
+function calcVal(r){if(r.type==="resource"){const x=DATA.find(d=>d.name.toLowerCase()===String(r.item).toLowerCase());return x?price(x.stats).p:null}
+ if(r.type==="crafted"&&SCH){const sc=SCH.schematics.find(d=>d.name.toLowerCase()===String(r.item).toLowerCase());if(sc){const c=cost(sc);return c.total*(1+(+SS.markup||0)/100)}}return null}
+function guessType(v){v=v.toLowerCase();if(DATA.some(d=>d.name.toLowerCase()===v))return"resource";if(SCH&&SCH.schematics.some(d=>d.name.toLowerCase()===v))return"crafted";return null}
+function fillItems(){$("itemList").innerHTML=DATA.map(d=>`<option value="${esc(d.name)}">Resource · ${esc(d.type)}</option>`).join("")+(SCH?[...new Set(SCH.schematics.map(s=>s.name))].map(n=>`<option value="${esc(n)}">Crafted item</option>`).join(""):"")}
+function renderStock(){let tc=0,tv=0,tp=0,missingV=0;
+ $("stockBody").innerHTML=STOCK.map((r,i)=>{const q=num(r.qty)||0,c=num(r.cpu),cv=calcVal(r),so=num(r.sold),qs=num(r.qsold);const tot=c==null?null:c*q,ppu=so!=null&&c!=null?so-c:null,tpr=ppu!=null&&qs!=null?ppu*qs:null;
+  if(tot!=null)tc+=tot;if(cv!=null)tv+=cv*q;else if(q)missingV++;if(tpr!=null)tp+=tpr;
+  const cls=v=>v==null?"":v>=0?"pos":"neg";
+  return `<tr data-i="${i}"><td><input class="w160" list="itemList" data-f="item" value="${esc(r.item||"")}"></td><td><select data-f="type">${["resource","crafted","other"].map(t=>`<option value="${t}" ${r.type===t?"selected":""}>${t==="resource"?"Resource":t==="crafted"?"Crafted item":"Other"}</option>`).join("")}</select></td>
+  <td><input class="w60" type="number" min="0" data-f="qty" value="${r.qty??""}"></td><td><input class="w90" type="number" min="0" step="0.01" data-f="cpu" value="${r.cpu??""}"></td><td class="n">${f2(tot)}</td><td class="n price">${f2(cv)}</td>
+  <td><input class="w90" type="number" min="0" step="0.01" data-f="sold" value="${r.sold??""}"></td><td><input class="w60" type="number" min="0" data-f="qsold" value="${r.qsold??""}"></td>
+  <td class="n ${cls(ppu)}">${f2(ppu)}</td><td class="n ${cls(tpr)}">${f2(tpr)}</td><td><input class="w160" data-f="notes" value="${esc(r.notes||"")}"></td><td><button class="ghost" data-del="${i}" title="Delete row">✕</button></td></tr>`}).join("")||'<tr><td colspan="12" class="muted">No stock yet — add a row above.</td></tr>';
+ $("stockFoot").innerHTML=`<tr><td colspan="4">Totals (${STOCK.length} rows)</td><td class="n">${fmt(tc)}</td><td class="n price" colspan="2">At calc price: ${fmt(tv)}${missingV?` <span class="muted">(${missingV} row(s) without a calc value)</span>`:""}</td><td colspan="2">Realized profit:</td><td class="n ${tp>=0?"pos":"neg"}">${fmt(tp)}</td><td colspan="2"></td></tr>`}
+$("nItem").addEventListener("input",()=>{$("nType").value=guessType($("nItem").value)||"other"});
+$("addStock").onclick=()=>{const item=$("nItem").value.trim();if(!item){$("stockMsg").textContent="Enter an item.";return}
+ STOCK.push({item,type:$("nType").value,qty:num($("nQty").value),cpu:num($("nCpu").value),sold:num($("nSold").value),qsold:num($("nQs").value),notes:$("nNotes").value});
+ stSave();["nItem","nQty","nCpu","nSold","nQs","nNotes"].forEach(i=>$(i).value="");$("stockMsg").textContent="Added.";renderStock()};
+$("stockBody").addEventListener("change",e=>{const t=e.target,tr=t.closest("tr[data-i]");if(!tr||!t.dataset.f)return;const r=STOCK[+tr.dataset.i],f=t.dataset.f;
+ r[f]=["qty","cpu","sold","qsold"].includes(f)?num(t.value):t.value;if(f==="item"){const g=guessType(t.value);if(g)r.type=g}stSave();renderStock()});
+$("stockBody").addEventListener("click",e=>{const d=e.target.dataset.del;if(d==null)return;const r=STOCK[+d];if(!confirm(`Delete "${r.item}"?`))return;STOCK.splice(+d,1);stSave();renderStock()});
+const COLS=["item","type","qty","cpu","sold","qsold","notes"],HDR=["Item","Type","Qty on hand","Purchase CPU","Sold CPU","Qty sold","Notes"];
+const csvq=v=>{v=v==null?"":String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+$("expCsv").onclick=()=>{const rows=[HDR.concat(["Total cost","Calc value/u","Profit/u","Total profit"]).join(",")].concat(STOCK.map(r=>{const c=num(r.cpu),q=num(r.qty)||0,cv=calcVal(r),ppu=r.sold!=null&&c!=null?r.sold-c:null;
+  return COLS.map(k=>csvq(r[k])).concat([c==null?"":(c*q).toFixed(2),cv==null?"":cv.toFixed(2),ppu==null?"":ppu.toFixed(2),ppu!=null&&r.qsold!=null?(ppu*r.qsold).toFixed(2):""].map(csvq)).join(",")}));
+ const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.join("\n")],{type:"text/csv"}));a.download=`dkd-stock-${new Date().toISOString().slice(0,10)}.csv`;a.click()};
+function parseCsv(t){const out=[];let row=[],f="",q=false;for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c==='"'&&t[i+1]==='"'){f+='"';i++}else if(c==='"')q=false;else f+=c}
+ else if(c==='"')q=true;else if(c===","){row.push(f);f=""}else if(c==="\n"||c==="\r"){if(c==="\r"&&t[i+1]==="\n")i++;row.push(f);out.push(row);row=[];f=""}else f+=c}if(f||row.length){row.push(f);out.push(row)}return out.filter(r=>r.some(x=>x!==""))}
+$("impCsvBtn").onclick=()=>$("impCsv").click();
+$("impCsv").onchange=async e=>{const file=e.target.files[0];if(!file)return;const rows=parseCsv(await file.text());const h=rows.shift().map(x=>x.trim().toLowerCase());
+ const idx=HDR.map(x=>h.indexOf(x.toLowerCase()));if(idx[0]<0){$("stockMsg").textContent="Import failed: no 'Item' column.";return}
+ const add=rows.map(r=>{const o={};COLS.forEach((k,j)=>{const v=idx[j]<0?"":(r[idx[j]]||"").trim();o[k]=["qty","cpu","sold","qsold"].includes(k)?num(v):v});if(!["resource","crafted","other"].includes(o.type))o.type=guessType(o.item)||"other";return o}).filter(o=>o.item);
+ const replace=STOCK.length&&confirm(`Import ${add.length} rows. OK = replace current ${STOCK.length} rows, Cancel = append.`);STOCK=replace?add:STOCK.concat(add);stSave();renderStock();$("stockMsg").textContent=`Imported ${add.length} rows.`;e.target.value=""};
+const _rd=renderDetail;renderDetail=function(){_rd();renderStock()};const _os2=onSet;onSet=function(src){_os2(src);renderStock()};
+(function waitStock(){if(DATA.length&&SCH){fillItems();renderStock()}else{renderStock();setTimeout(waitStock,200)}})();
 </script></body></html>

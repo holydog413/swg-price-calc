@@ -13,3 +13,6 @@ The base price fields (top box and Settings) and Reset defaults are PIN-locked. 
 
 ## Advanced components
 `build_schematics.py` also scrapes Medic component schematics and fetches any referenced component missing from the profession lists. A slot that calls for a basic component also accepts its "_advanced" variant when Galaxy Harvester's open-source template data shows the advanced template derives from the basic one. The Schematics tab has a "Use advanced components" toggle (default ON for Doctor schematics, OFF otherwise); advanced components are priced through their own recipes.
+
+## Stock tab
+Track inventory on hand: item (autocomplete from current resources and schematics, or free text), type, quantity, purchase CPU, sold CPU / qty sold, notes. Calculator value per unit comes from the pricing settings (resource: spawn price; crafted item: schematic suggested sell per item). Totals show inventory at cost, at calculator price, and realized profit. Saved in localStorage, with CSV export/import. No PIN.

@@ -166,7 +166,9 @@ def main():
         save_inv(out)
         if not PUSH: break
         g("add", REL); g("commit", "-q", "-m", "Update tools/inventory.enc.json from game chat", "--", REL)
-        if g("push", "-q", "origin", "HEAD:main", check=False).returncode == 0: break
+        if g("pull", "-q", "--rebase", "--autostash", "origin", "main", check=False).returncode != 0:
+            g("rebase", "--abort", check=False)   # the file changed upstream since we read it
+        elif g("push", "-q", "origin", "HEAD:main", check=False).returncode == 0: break
         g("reset", "-q", "HEAD~1")   # someone (e.g. the web page) saved in between: drop our commit, re-read, re-apply
         print("push rejected, retrying with latest file", file=sys.stderr)
     else: sys.exit("could not push after 5 attempts; seen-state not updated")

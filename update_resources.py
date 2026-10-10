@@ -15,7 +15,7 @@ except json.JSONDecodeError:   # GH sometimes omits the closing ] of the resourc
 res = data["response"].get("resources") or []
 out = []
 for r in res:
-    out.append({"name": r["spawn_name"], "type": r["resource_type_name"], "group": r.get("container_type",""),
+    out.append({"name": r["spawn_name"], "type": r["resource_type_name"], "rt": r["resource_type"], "group": r.get("container_type",""),
         "planets": [p["name"] for p in r.get("planets", []) if "available_by" in p] or [p["name"] for p in r.get("planets", [])],
         "entered": r.get("entered",""), "stats": {s: r[s] for s in STATS if s in r}})
 if not out: sys.exit("no resources parsed; not overwriting")

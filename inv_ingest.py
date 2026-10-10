@@ -11,11 +11,32 @@ deduped via inv_seen.json. Commands:
   inv -<qty> <name>            remove stock
   inv sold <qty> <name> @<px>  record a sale (on hand -= qty, qty sold += qty at px)
   inv check <name>             no-op
-Quantities: 200000, 200k, 1.5m.  Options: --push (commit+push inventory.json), --dry-run.
+Quantities: 200000, 200k, 1.5m.  Options: --push (commit+push tools/inventory.enc.json in dkd-guild), --dry-run.
+The inventory is stored only encrypted (AES-256-GCM, key = PBKDF2-SHA256 of $DKD_INV_PASSWORD, random salt).
 """
 import json, re, os, sys, subprocess, datetime
-HERE = os.path.dirname(os.path.abspath(__file__))
-INV, SEEN = os.path.join(HERE, "inventory.json"), os.path.join(HERE, "inv_seen.json")
+HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
+from dkd_target import OUT, push
+import base64, secrets
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+INV, SEEN = os.path.join(OUT, "inventory.enc.json"), os.path.join(HERE, "inv_seen.json")
+ITER = 310000
+b64, unb64 = (lambda b: base64.b64encode(b).decode()), base64.b64decode
+def _key(pw, salt, it): return PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=it).derive(pw.encode())
+def pw():
+    p = os.environ.get("DKD_INV_PASSWORD")
+    if not p: sys.exit("DKD_INV_PASSWORD is not set")
+    return p
+def load_inv():
+    if not os.path.exists(INV): return {"items": [], "log": []}
+    e = json.load(open(INV))
+    return json.loads(AESGCM(_key(pw(), unb64(e["salt"]), e["iter"])).decrypt(unb64(e["iv"]), unb64(e["ct"]), None))
+def save_inv(obj):
+    salt, iv = secrets.token_bytes(16), secrets.token_bytes(12)
+    ct = AESGCM(_key(pw(), salt, ITER)).encrypt(iv, json.dumps(obj, separators=(",", ":")).encode(), None)
+    json.dump({"v": 1, "alg": "AES-256-GCM", "kdf": "PBKDF2-SHA256", "iter": ITER, "salt": b64(salt), "iv": b64(iv), "ct": b64(ct)}, open(INV, "w"))
 BOT, PREFIX = "uprising bot", "rover: inv"
 args = [a for a in sys.argv[1:] if not a.startswith("--")]; DRY = "--dry-run" in sys.argv
 
@@ -37,9 +58,9 @@ def parse(content):
 def load(p, d):
     try: return json.load(open(p))
     except FileNotFoundError: return d
-RES = {r["name"].lower(): r for r in load(os.path.join(HERE, "resources.json"), {"resources": []})["resources"]}
+RES = {r["name"].lower(): r for r in load(os.path.join(OUT, "resources.json"), {"resources": []})["resources"]}
 SCH = {}
-for s in load(os.path.join(HERE, "schematics.json"), {"schematics": []})["schematics"]: SCH.setdefault(s["name"].lower(), s)
+for s in load(os.path.join(OUT, "schematics.json"), {"schematics": []})["schematics"]: SCH.setdefault(s["name"].lower(), s)
 def match(name):
     k = name.lower()
     if k in RES: r = RES[k]; return {"item": r["name"], "type": "resource", "resType": r["type"], "stats": r["stats"]}
@@ -77,7 +98,8 @@ def apply(inv, cmd, msg):
     inv["log"] = inv["log"][-500:]
 
 def main():
-    inv = load(INV, {"items": {}, "log": []}); inv["items"] = {i["item"].lower(): i for i in inv.get("items", [])} if isinstance(inv.get("items"), list) else inv["items"]
+    if "--init" in sys.argv and not os.path.exists(INV): save_inv({"updated": None, "items": [], "log": []}); print("initialized", INV, file=sys.stderr); return
+    inv = load_inv(); inv["items"] = {i["item"].lower(): i for i in inv.get("items", [])} if isinstance(inv.get("items"), list) else inv["items"]
     seen = set(load(SEEN, [])); done = 0
     msgs = sorted(read_msgs(), key=lambda m: (int(m["id"]) if str(m["id"]).isdigit() else 0, m.get("timestamp", "")))
     for msg in msgs:
@@ -92,10 +114,7 @@ def main():
         apply(inv, cmd, msg); done += 1; print("applied:", c, "->", cmd, file=sys.stderr)
     out = {"updated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "items": sorted(inv["items"].values(), key=lambda i: i["item"].lower()), "log": inv["log"]}
     if DRY: print(json.dumps(out, indent=1)); return
-    json.dump(out, open(INV, "w"), indent=1); json.dump(sorted(seen), open(SEEN, "w"))
+    save_inv(out); json.dump(sorted(seen), open(SEEN, "w"))
     print(f"{done} command(s) applied", file=sys.stderr)
-    if "--push" in sys.argv and done:
-        g = lambda *a: subprocess.run(["git", "-C", HERE, *a], check=True)
-        g("pull", "-q", "--rebase", "--autostash"); g("add", "inventory.json")
-        if subprocess.run(["git", "-C", HERE, "diff", "--cached", "--quiet"]).returncode: g("commit", "-q", "-m", "Update inventory.json from game chat"); g("push", "-q")
+    if "--push" in sys.argv and done: push(["inventory.enc.json"], "Update tools/inventory.enc.json from game chat")
 main()

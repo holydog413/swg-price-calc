@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Fetch current SWG Uprising spawns (Galaxy Harvester galaxy 161) and write resources.json.
-Same public endpoint as gh-discord/gh_to_discord.py. Use --push to commit & push to GitHub Pages."""
+Same public endpoint as gh-discord/gh_to_discord.py. Writes into the dkd-guild repo (tools/); --push commits & pushes it."""
 import json, re, sys, os, subprocess, urllib.request, urllib.parse, datetime
 GALAXY = os.environ.get("GH_GALAXY", "161")
 STATS = ["OQ","CD","DR","FL","HR","MA","PE","SR","UT","CR","ER"]
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE); from dkd_target import OUT, push
 q = {"galaxy": GALAXY, "formatType": "json", "available": "1", "fetchSize": "2000"}
 url = "https://galaxyharvester.net/getResources.py?" + urllib.parse.urlencode(q)
 raw = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "dkd-swg-price-calc"}), timeout=120).read().decode("iso-8859-15")
@@ -20,10 +21,6 @@ for r in res:
         "entered": r.get("entered",""), "stats": {s: r[s] for s in STATS if s in r}})
 if not out: sys.exit("no resources parsed; not overwriting")
 json.dump({"galaxy": int(GALAXY), "updated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-           "count": len(out), "resources": out}, open(os.path.join(HERE, "resources.json"), "w"), separators=(",",":"))
+           "count": len(out), "resources": out}, open(os.path.join(OUT, "resources.json"), "w"), separators=(",",":"))
 print(f"{len(out)} resources written", file=sys.stderr)
-if "--push" in sys.argv:
-    g = lambda *a: subprocess.run(["git", "-C", HERE, *a], check=True)
-    g("add", "resources.json")
-    if subprocess.run(["git","-C",HERE,"diff","--cached","--quiet"]).returncode:
-        g("commit", "-q", "-m", "Update resources.json"); g("push", "-q")
+if "--push" in sys.argv: push(["resources.json"], "Update tools/resources.json")

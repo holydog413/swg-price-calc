@@ -3,7 +3,7 @@
 Schematics change rarely: run occasionally (e.g. weekly). Polite: ~1 request/sec, cached in .schem_cache/.
 Usage: python3 build_schematics.py [--profs 5,1] [--refresh] [--push]"""
 import re, os, sys, json, time, csv, html, subprocess, urllib.request, urllib.parse, datetime
-GALAXY = "161"; HERE = os.path.dirname(os.path.abspath(__file__)); UA = {"User-Agent": "dkd-swg-price-calc"}
+GALAXY = "161"; HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE); from dkd_target import OUT, push; UA = {"User-Agent": "dkd-swg-price-calc"}
 PROFS = {5:"Architect",1:"Artisan",3:"Medic",8:"Chef",16:"Tailor",17:"Weaponsmith",6:"Armorsmith",11:"Droid Engineer",14:"Shipwright",7:"Bio-Engineer",10:"Doctor"}
 STATN = {"Overall Quality":"OQ","Conductivity":"CD","Decay Resist":"DR","Flavor":"FL","Heat Resistance":"HR","Malleability":"MA",
          "Potential Energy":"PE","Shock Resistance":"SR","Unit Toughness":"UT","Cold Resistance":"CR","Entangle Resistance":"ER"}
@@ -89,9 +89,6 @@ out = {"galaxy": int(GALAXY), "updated": datetime.datetime.now(datetime.timezone
        "source": "galaxyharvester.net schematics (galaxy 161)", "count": sum(1 for s in schems.values() if not s.get("error")),
        "schematics": sorted((s for s in schems.values() if not s.get("error")), key=lambda s: s["name"]),
        "groups": {g: sorted(groups[g] | {g}) for g in used if g in groups}}
-json.dump(out, open(os.path.join(HERE, "schematics.json"), "w"), separators=(",", ":"))
+json.dump(out, open(os.path.join(OUT, "schematics.json"), "w"), separators=(",", ":"))
 print(len(schems), "schematics written", file=sys.stderr)
-if "--push" in args:
-    g = lambda *a: subprocess.run(["git", "-C", HERE, *a], check=True)
-    g("add", "schematics.json")
-    if subprocess.run(["git", "-C", HERE, "diff", "--cached", "--quiet"]).returncode: g("commit", "-q", "-m", "Update schematics.json"); g("push", "-q")
+if "--push" in args: push(["schematics.json"], "Update tools/schematics.json")

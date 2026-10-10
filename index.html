@@ -96,12 +96,13 @@ function onSet(src){if(src==="top")$("base").value=$("topBase").value;else $("to
 ["base","mode","k"].forEach(i=>$(i).addEventListener("input",()=>onSet()));$("topBase").addEventListener("input",()=>onSet("top"));$("statpick").addEventListener("change",()=>onSet());
 const PIN_SALT="1f58b50f52ee4422c1b02f068d701f56",PIN_HASH="572050e9ee1d2e73adc40e09cb18077ee4fb623bd02c2db6c07b36c4e53661b6",UKEY="dkd-swg-price-unlocked";
 const unlocked=()=>sessionStorage.getItem(UKEY)==="1";
-function applyLock(){const u=unlocked();["base","topBase"].forEach(i=>$(i).readOnly=!u);["unlockTop","unlockSet"].forEach(i=>{$(i).textContent=u?"🔓 Unlocked":"🔒 Unlock";$(i).disabled=u})}
+function applyLock(){const u=unlocked();["base","topBase"].forEach(i=>$(i).readOnly=!u);["unlockTop","unlockSet"].forEach(i=>{$(i).textContent=u?"🔓 Lock":"🔒 Unlock";$(i).title=u?"Re-lock the price fields":"Enter PIN to edit the price"})}
 async function sha(t){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
 async function askUnlock(msgId){if(unlocked())return true;const pin=prompt("Enter the 4-digit PIN to change the price");if(pin==null)return false;
  const ok=(await sha(PIN_SALT+pin.trim()))===PIN_HASH;["lockMsgTop","lockMsgSet"].forEach(i=>$(i).textContent="");
  if(ok){sessionStorage.setItem(UKEY,"1");applyLock();return true}$(msgId).textContent="Incorrect PIN";return false}
-$("unlockTop").onclick=()=>askUnlock("lockMsgTop");$("unlockSet").onclick=()=>askUnlock("lockMsgSet");
+function relock(){sessionStorage.removeItem(UKEY);["lockMsgTop","lockMsgSet"].forEach(i=>$(i).textContent="");applyLock()}
+$("unlockTop").onclick=()=>unlocked()?relock():askUnlock("lockMsgTop");$("unlockSet").onclick=()=>unlocked()?relock():askUnlock("lockMsgSet");
 $("clearStats").onclick=()=>{S.stats=[];initUI();onSet()};$("reset").onclick=async()=>{if(!(await askUnlock("lockMsgSet")))return;S=Object.assign({},DEF,{stats:[]});initUI();onSet()};
 function calc(){const st={};STATS.forEach(s=>{const v=$("m"+s).value;if(v!=="")st[s]=Math.min(1000,Math.max(0,+v))});const {p,avg}=price(st),q=+$("qty").value||0;
  $("mPrice").textContent=p==null?"—":p.toLocaleString(undefined,{maximumFractionDigits:2})+" cr";$("mTotal").textContent=p==null?"—":fmt(p*q)+" cr";$("mAvg").textContent=avg==null?"Enter stats (only checked stats count, if any)":`Average of counted stats: ${avg.toFixed(1)}`}

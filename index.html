@@ -38,9 +38,13 @@ td.price{color:var(--red-hi);font-weight:600}a{color:#ff6a6f}
 .ing select{min-width:220px}.ing input{width:90px}.tot{display:flex;gap:24px;flex-wrap:wrap;margin-top:12px}.tot>div{min-width:150px}
 .wt{display:inline-block;background:#0e0a0b;border:1px solid #3a2326;border-radius:10px;padding:1px 7px;margin:2px;font-size:12px}
 .warn{color:#ffb070}
+.topbase{max-width:1300px;margin:14px auto 0;padding:12px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:linear-gradient(90deg,rgba(192,38,45,.18),rgba(23,17,18,.9));border:1px solid var(--red-deep);border-radius:6px}
+.topbase label{margin:0;font-family:var(--display);font-size:14px;color:#f3e9e6;letter-spacing:.08em}.topbase input{width:140px;font-size:20px;font-family:var(--display);color:var(--red-hi);text-align:right}
+@media(max-width:1336px){.topbase{margin:14px 18px 0}}
 footer{text-align:center;color:#6f625e;padding:20px;font-size:12px}
 </style></head><body>
 <header><h1><span>DKD</span> · Uprising Resource Pricer</h1><div class="sub">Dark Knight Disciples — SWG Uprising galaxy market calculator</div></header>
+<div class="topbase"><label for="topBase">Credits per unit (max stats)</label><input id="topBase" type="number" min="0" step="1"><span class="muted">Price at 1000 in every counted stat. Same as Base price in Settings; all prices update live.</span></div>
 <main>
 <aside>
  <section class="panel" id="settings"><h2>Settings</h2>
@@ -83,12 +87,12 @@ let S=Object.assign({},DEF,JSON.parse(localStorage.getItem(KEY)||"{}")),_m=(()=>
 const $=id=>document.getElementById(id),save=()=>localStorage.setItem(KEY,JSON.stringify(S)),fmt=n=>n==null?"—":Math.round(n).toLocaleString();
 function price(stats){const keys=(S.stats.length?S.stats:STATS).filter(s=>stats[s]!=null&&stats[s]!=="");if(!keys.length)return{p:null,avg:null};
  const avg=keys.reduce((a,s)=>a+ +stats[s],0)/keys.length,r=avg/1000,p=S.mode==="power"?S.base*Math.pow(r,S.k):S.base*r;return{p,avg}}
-function initUI(){$("base").value=S.base;$("mode").value=S.mode;$("k").value=S.k;$("kwrap").style.display=S.mode==="power"?"":"none";
+function initUI(){$("base").value=S.base;$("topBase").value=S.base;$("mode").value=S.mode;$("k").value=S.k;$("kwrap").style.display=S.mode==="power"?"":"none";
  $("statpick").innerHTML=STATS.map(s=>`<label class="chip"><input type="checkbox" value="${s}" ${S.stats.includes(s)?"checked":""}>${s}</label>`).join("")}
 $("manual").innerHTML=STATS.map(s=>`<div><label for="m${s}">${s}</label><input id="m${s}" type="number" min="1" max="1000"></div>`).join("");
 $("thead").innerHTML=[["name","Name"],["type","Type"],["planets","Planets"],...STATS.map(s=>[s,s]),["avg","Avg"],["price","Price/u"]].map(([k,l])=>`<th data-k="${k}">${l}</th>`).join("");
-function onSet(){S.base=+$("base").value||0;S.mode=$("mode").value;S.k=+$("k").value||1;S.stats=[...document.querySelectorAll("#statpick input:checked")].map(i=>i.value);$("kwrap").style.display=S.mode==="power"?"":"none";save();render();calc()}
-["base","mode","k"].forEach(i=>$(i).addEventListener("input",()=>onSet()));$("statpick").addEventListener("change",()=>onSet());
+function onSet(src){if(src==="top")$("base").value=$("topBase").value;else $("topBase").value=$("base").value;S.base=+$("base").value||0;S.mode=$("mode").value;S.k=+$("k").value||1;S.stats=[...document.querySelectorAll("#statpick input:checked")].map(i=>i.value);$("kwrap").style.display=S.mode==="power"?"":"none";save();render();calc()}
+["base","mode","k"].forEach(i=>$(i).addEventListener("input",()=>onSet()));$("topBase").addEventListener("input",()=>onSet("top"));$("statpick").addEventListener("change",()=>onSet());
 $("clearStats").onclick=()=>{S.stats=[];initUI();onSet()};$("reset").onclick=()=>{S=Object.assign({},DEF,{stats:[]});initUI();onSet()};
 function calc(){const st={};STATS.forEach(s=>{const v=$("m"+s).value;if(v!=="")st[s]=Math.min(1000,Math.max(0,+v))});const {p,avg}=price(st),q=+$("qty").value||0;
  $("mPrice").textContent=p==null?"—":p.toLocaleString(undefined,{maximumFractionDigits:2})+" cr";$("mTotal").textContent=p==null?"—":fmt(p*q)+" cr";$("mAvg").textContent=avg==null?"Enter stats (only checked stats count, if any)":`Average of counted stats: ${avg.toFixed(1)}`}
@@ -146,7 +150,7 @@ $("sdetail").addEventListener("change",e=>{const t=e.target;if(t.dataset.k!=null
 $("sdetail").addEventListener("click",e=>{if(e.target.id==="autoAll"){Object.keys(SS.picks).filter(k=>k.startsWith(CUR.id+"#")).forEach(k=>delete SS.picks[k]);ssave();renderDetail()}const g=e.target.dataset&&e.target.dataset.go;if(g){e.preventDefault();CUR=SCHMAP[g];renderList();renderDetail()}});
 $("slist").onclick=e=>{const d=e.target.closest("[data-id]");if(!d)return;CUR=SCHMAP[d.dataset.id];renderList();renderDetail()};
 ["sq","sprof"].forEach(i=>$(i).addEventListener("input",renderList));
-const _onSet=onSet;onSet=function(){_onSet();if(CUR)renderDetail()};
+const _onSet=onSet;onSet=function(src){_onSet(src);if(CUR)renderDetail()};
 Promise.all([fetch("schematics.json?t="+Date.now()).then(r=>r.json()),new Promise(res=>{const t=setInterval(()=>{if(DATA.length){clearInterval(t);res()}},100)})]).then(([d])=>{SCH=d;d.schematics.forEach(s=>SCHMAP[s.id]=s);
  [...new Set(d.schematics.flatMap(s=>s.profs))].sort().forEach(p=>$("sprof").add(new Option(p,p)));renderList()}).catch(e=>$("smeta").textContent="Failed to load schematics.json: "+e);
 </script></body></html>

@@ -78,8 +78,8 @@ footer{text-align:center;color:#6f625e;padding:20px;font-size:12px}
 </main>
 <footer>Data: <a href="https://galaxyharvester.net/" target="_blank" rel="noopener">Galaxy Harvester</a> (galaxy 161, SWG Uprising). Prices are guild guidance, not in-game data. · <a href="https://darkknightdisciples.com" target="_blank" rel="noopener">darkknightdisciples.com</a></footer>
 <script>
-const STATS=["OQ","CD","DR","FL","HR","MA","PE","SR","UT","CR","ER"],DEF={base:125,mode:"linear",k:1,stats:[],v:3},KEY="dkd-swg-price-settings";
-let S=Object.assign({},DEF,JSON.parse(localStorage.getItem(KEY)||"{}")),_m=(()=>{const o=JSON.parse(localStorage.getItem(KEY)||"{}");if(o.v!==3){if(+S.base===500||+S.base===250)S.base=125;S.v=3;localStorage.setItem(KEY,JSON.stringify(S))}})(),DATA=[],sortKey="price",sortDir=-1;
+const STATS=["OQ","CD","DR","FL","HR","MA","PE","SR","UT","CR","ER"],DEF={base:22,mode:"linear",k:1,stats:[],v:4},KEY="dkd-swg-price-settings";
+let S=Object.assign({},DEF,JSON.parse(localStorage.getItem(KEY)||"{}")),_m=(()=>{const o=JSON.parse(localStorage.getItem(KEY)||"{}");if(o.v!==4){if([500,250,125].includes(+S.base))S.base=22;S.v=4;localStorage.setItem(KEY,JSON.stringify(S))}})(),DATA=[],sortKey="price",sortDir=-1;
 const $=id=>document.getElementById(id),save=()=>localStorage.setItem(KEY,JSON.stringify(S)),fmt=n=>n==null?"—":Math.round(n).toLocaleString();
 function price(stats){const keys=(S.stats.length?S.stats:STATS).filter(s=>stats[s]!=null&&stats[s]!=="");if(!keys.length)return{p:null,avg:null};
  const avg=keys.reduce((a,s)=>a+ +stats[s],0)/keys.length,r=avg/1000,p=S.mode==="power"?S.base*Math.pow(r,S.k):S.base*r;return{p,avg}}

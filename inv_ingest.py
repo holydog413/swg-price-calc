@@ -11,12 +11,14 @@ deduped via inv_seen.json. Commands:
   inv -<qty> <name>            remove stock
   inv sold <qty> <name> @<px>  record a sale (on hand -= qty, qty sold += qty at px)
   inv check <name>             no-op
+  inv set <name> [qty=<n>] [cpu=<x>] [sold=<n>] [avgsold=<x>]   overwrite fields
+  inv del <name>               delete the item
 Quantities: 200000, 200k, 1.5m.  Options: --push (commit+push tools/inventory.enc.json in dkd-guild), --dry-run.
 The inventory is stored only encrypted (AES-256-GCM, key = PBKDF2-SHA256 of $DKD_INV_PASSWORD, random salt).
 """
 import json, re, os, sys, subprocess, datetime
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
-from dkd_target import OUT, push
+from dkd_target import OUT, push, REPO
 import base64, secrets
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -38,7 +40,7 @@ def save_inv(obj):
     ct = AESGCM(_key(pw(), salt, ITER)).encrypt(iv, json.dumps(obj, separators=(",", ":")).encode(), None)
     json.dump({"v": 1, "alg": "AES-256-GCM", "kdf": "PBKDF2-SHA256", "iter": ITER, "salt": b64(salt), "iv": b64(iv), "ct": b64(ct)}, open(INV, "w"))
 BOT, PREFIX = "uprising bot", "rover: inv"
-args = [a for a in sys.argv[1:] if not a.startswith("--")]; DRY = "--dry-run" in sys.argv
+args = [a for i, a in enumerate(sys.argv[1:], 1) if not a.startswith("--") and sys.argv[i-1] != "--delete-item"]; DRY = "--dry-run" in sys.argv
 
 def qty(s):
     m = re.fullmatch(r"(\d+(?:\.\d+)?)([km]?)", s.lower().replace(",", ""))
@@ -54,6 +56,20 @@ def parse(content):
     if m["op"]: return {"op": "add" if m["op"] == "+" else "remove", "qty": qty(m["q"]), "name": m["name"].strip(), "px": num(m["px"]) if m["px"] else None}
     if m["sq"]: return {"op": "sold", "qty": qty(m["sq"]), "name": m["sname"].strip(), "px": num(m["spx"])}
     return {"op": "check", "name": m["cname"].strip()}
+
+SETRE = re.compile(r"^rover:\s*inv\s+set\s+(?P<name>.+?)\s+(?P<kv>(?:\w+\s*=\s*\S+\s*)+)$", re.I)
+DELRE = re.compile(r"^rover:\s*inv\s+del(?:ete)?\s+(?P<name>.+?)\s*$", re.I)
+SETKEYS = {"qty": "qty", "cpu": "cpu", "sold": "qsold", "qsold": "qsold", "avgsold": "avgsold", "soldcpu": "avgsold"}
+def parse_ext(content):
+    c = content.strip()
+    if (m := DELRE.match(c)): return {"op": "del", "name": m["name"]}
+    if (m := SETRE.match(c)):
+        f = {}
+        for k, v in re.findall(r"(\w+)\s*=\s*(\S+)", m["kv"]):
+            if k.lower() not in SETKEYS: raise ValueError(f"unknown field {k!r}")
+            f[SETKEYS[k.lower()]] = num(v)
+        return {"op": "set", "name": m["name"], "fields": f}
+    return parse(c)
 
 def load(p, d):
     try: return json.load(open(p))
@@ -82,6 +98,10 @@ def read_msgs():
 
 def apply(inv, cmd, msg):
     m = match(cmd["name"]); key = m["item"].lower()
+    if cmd["op"] == "del":
+        if key not in inv["items"]: key = next((k for k in inv["items"] if k == cmd["name"].lower()), key)
+        inv["items"].pop(key, None)
+        inv["log"].append({"id": str(msg["id"]), "ts": msg.get("timestamp", ""), "cmd": msg["content"], "item": m["item"], "op": "del"}); return
     it = inv["items"].setdefault(key, {**m, "qty": 0, "cpu": None, "qsold": 0, "revenue": 0.0, "costSold": 0.0})
     it.update({k: v for k, v in m.items()})  # refresh stats/type
     q = cmd.get("qty", 0)
@@ -93,28 +113,63 @@ def apply(inv, cmd, msg):
     elif cmd["op"] == "remove": it["qty"] = max(0, it["qty"] - q)
     elif cmd["op"] == "sold":
         it["qty"] = max(0, it["qty"] - q); it["qsold"] += q; it["revenue"] += q * cmd["px"]; it["costSold"] += q * (it["cpu"] or 0)
+    elif cmd["op"] == "set": set_fields(it, cmd["fields"])
     it["updated"] = msg.get("timestamp", "")
     inv["log"].append({"id": str(msg["id"]), "ts": msg.get("timestamp", ""), "cmd": msg["content"], "item": m["item"], "op": cmd["op"]})
     inv["log"] = inv["log"][-500:]
 
+def set_fields(it, f):
+    """Overwrite qty / cpu / qsold / avgsold; realized cost of sold units keeps its per-unit basis."""
+    basis = it["costSold"] / it["qsold"] if it.get("qsold") else (it.get("cpu") or 0)
+    avg = it["revenue"] / it["qsold"] if it.get("qsold") else 0
+    if "qty" in f: it["qty"] = max(0, round(f["qty"]))
+    if "cpu" in f: it["cpu"] = f["cpu"]
+    if "qsold" in f: it["qsold"] = max(0, round(f["qsold"]))
+    if "avgsold" in f: avg = f["avgsold"]
+    if not it.get("costSold") and "cpu" in f: basis = f["cpu"]
+    it["revenue"] = it["qsold"] * avg; it["costSold"] = it["qsold"] * basis
+
+REL = "tools/inventory.enc.json"
+def g(*a, check=True): return subprocess.run(["git", "-C", REPO, *a], check=check, capture_output=True, text=True)
+def sync_latest():
+    """Re-read the newest committed inventory (the page may have saved via the GitHub API) before writing."""
+    g("fetch", "-q", "origin", "main"); g("checkout", "origin/main", "--", REL)
+
 def main():
+    if "--delete-item" in sys.argv:   # maintenance: drop an item (and its log lines) entirely
+        name = sys.argv[sys.argv.index("--delete-item") + 1].lower(); inv = load_inv()
+        inv["items"] = [i for i in inv["items"] if i["item"].lower() != name]; inv["log"] = [l for l in inv["log"] if l["item"].lower() != name]
+        save_inv(inv); print("deleted", name, file=sys.stderr)
+        if "--push" in sys.argv: push(["inventory.enc.json"], "Update tools/inventory.enc.json")
+        return
     if "--init" in sys.argv and not os.path.exists(INV): save_inv({"updated": None, "items": [], "log": []}); print("initialized", INV, file=sys.stderr); return
-    inv = load_inv(); inv["items"] = {i["item"].lower(): i for i in inv.get("items", [])} if isinstance(inv.get("items"), list) else inv["items"]
-    seen = set(load(SEEN, [])); done = 0
+    seen = set(load(SEEN, []))
+    cmds = []
     msgs = sorted(read_msgs(), key=lambda m: (int(m["id"]) if str(m["id"]).isdigit() else 0, m.get("timestamp", "")))
     for msg in msgs:
         mid = str(msg.get("id", "")); c = (msg.get("content") or "").strip()
         if not mid or mid in seen: continue
         if (msg.get("author") or "").strip().lower() != BOT or not c.lower().startswith(PREFIX): continue
         seen.add(mid)
-        try: cmd = parse(c)
+        try: cmd = parse_ext(c)
         except ValueError as e: cmd = None; print("bad command:", c, e, file=sys.stderr)
         if not cmd: print("unrecognized:", c, file=sys.stderr); continue
         if cmd["op"] == "check": print("check (no-op):", c, file=sys.stderr); continue
-        apply(inv, cmd, msg); done += 1; print("applied:", c, "->", cmd, file=sys.stderr)
-    out = {"updated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "items": sorted(inv["items"].values(), key=lambda i: i["item"].lower()), "log": inv["log"]}
-    if DRY: print(json.dumps(out, indent=1)); return
-    save_inv(out); json.dump(sorted(seen), open(SEEN, "w"))
-    print(f"{done} command(s) applied", file=sys.stderr)
-    if "--push" in sys.argv and done: push(["inventory.enc.json"], "Update tools/inventory.enc.json from game chat")
+        cmds.append((cmd, msg)); print("parsed:", c, "->", cmd, file=sys.stderr)
+    PUSH = "--push" in sys.argv and cmds and not DRY
+    for attempt in range(5):
+        if PUSH: sync_latest()
+        inv = load_inv(); inv["items"] = {i["item"].lower(): i for i in inv.get("items", [])}
+        for cmd, msg in cmds: apply(inv, cmd, msg)
+        out = {"updated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "items": sorted(inv["items"].values(), key=lambda i: i["item"].lower()), "log": inv["log"][-500:]}
+        if DRY: print(json.dumps(out, indent=1)); return
+        save_inv(out)
+        if not PUSH: break
+        g("add", REL); g("commit", "-q", "-m", "Update tools/inventory.enc.json from game chat", "--", REL)
+        if g("push", "-q", "origin", "HEAD:main", check=False).returncode == 0: break
+        g("reset", "-q", "HEAD~1")   # someone (e.g. the web page) saved in between: drop our commit, re-read, re-apply
+        print("push rejected, retrying with latest file", file=sys.stderr)
+    else: sys.exit("could not push after 5 attempts; seen-state not updated")
+    json.dump(sorted(seen), open(SEEN, "w"))
+    print(f"{len(cmds)} command(s) applied", file=sys.stderr)
 main()
